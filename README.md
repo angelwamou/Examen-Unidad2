@@ -89,33 +89,59 @@ Con `padding=1` y kernel 3×3, la Conv2d conserva H×W: `H_out = (H + 2·1 − 3
 
 ## Pregunta 4 — Entrenamiento y análisis crítico
 
-**Configuración:** `CrossEntropyLoss`, `Adam(lr=1e-3, weight_decay=1e-4)`, batch 128, 20 épocas, semilla 4. Se guarda el modelo con mejor accuracy de validación y se evalúa sobre el test.
+**Configuración:** `CrossEntropyLoss`, `Adam(lr=1e-3, weight_decay=1e-4)`, batch 256, **3 épocas**, semilla 4, CPU. Se guarda el modelo con mejor accuracy de validación y se evalúa sobre el test.
+
+```
+python src/train.py --epochs 3 --batch-size 256
+```
 
 ![Curvas](outputs/loss_accuracy.png)
 ![Matriz de confusión](outputs/confusion_matrix.png)
 
 ### Resultados con semilla 4
 
-> ⚠️ Completar con los valores que imprime `train.py` (también quedan en `outputs/metrics.json`).
+| Época | Train loss | Train acc | Val loss | Val acc |
+|---|---|---|---|---|
+| 1 | 1.6714 | 37.35 % | 1.3417 | 50.69 % |
+| 2 | 1.2903 | 53.14 % | 1.2597 | 55.25 % |
+| 3 | 1.0887 | 61.35 % | 1.0253 | 64.27 % |
 
 | Métrica | Valor |
 |---|---|
-| Accuracy entrenamiento (última época) | XX.XX % |
-| Accuracy validación (última época) | XX.XX % |
-| Mejor accuracy validación | XX.XX % |
-| Loss entrenamiento / validación (última época) | X.XXXX / X.XXXX |
-| **Accuracy en test** | **XX.XX %** |
-| Brecha train − val | ±X.XX pp |
+| Mejor accuracy de validación | 64.27 % |
+| Test loss | 1.0185 |
+| **Accuracy en test** | **64.33 %** |
+| Brecha train − val (acc) | −2.92 pp |
 
-### Interpretación
+| Clase | Precision | Recall | F1 |
+|---|---|---|---|
+| avión | 0.7967 | 0.5800 | 0.6713 |
+| automóvil | 0.8938 | 0.7740 | 0.8296 |
+| pájaro | 0.5924 | 0.3720 | 0.4570 |
+| gato | 0.5217 | 0.1800 | 0.2677 |
+| ciervo | 0.4799 | 0.7050 | 0.5711 |
+| perro | 0.4805 | 0.7020 | 0.5705 |
+| rana | 0.7766 | 0.7090 | 0.7412 |
+| caballo | 0.4949 | 0.8330 | 0.6209 |
+| barco | 0.8730 | 0.7770 | 0.8222 |
+| camión | 0.7876 | 0.8010 | 0.7942 |
+| **macro avg** | 0.6697 | 0.6433 | 0.6346 |
 
-Criterios usados:
-- **Overfitting:** accuracy de train muy superior a validación (brecha > ~8–10 pp) y loss de validación que sube mientras la de train sigue bajando.
-- **Underfitting:** accuracy baja en ambos conjuntos (< ~60 %) con curvas aún en ascenso o estancadas en valores bajos.
-- **Buen ajuste:** curvas paralelas y cercanas, loss de validación estable.
+### Análisis crítico
 
-*(Redactar con tus números, por ejemplo:)* Con la semilla 4, el modelo alcanzó XX % en entrenamiento y XX % en validación, una brecha de X pp. Como la loss de validación [se mantuvo estable / empezó a subir desde la época N], el modelo [no presenta sobreajuste significativo / presenta un sobreajuste leve]. Es común que la accuracy de validación sea **igual o mayor** que la de entrenamiento en las primeras épocas, porque el entrenamiento se mide sobre imágenes con *data augmentation* y Dropout activo, mientras que la validación usa imágenes limpias y el modelo en modo `eval()`.
+El modelo alcanzó **64.33 % de accuracy en test**, prácticamente igual a la de validación (64.27 %), lo que indica que generaliza de forma consistente a datos no vistos.
 
-En la matriz de confusión, las clases con más errores suelen ser **gato ↔ perro** y **automóvil ↔ camión** (formas y texturas parecidas a 32×32), mientras que **automóvil, barco y rana** suelen superar el 85 %. *(Confirmar con tu matriz.)*
+**Overfitting: no.** La accuracy de validación (64.27 %) supera a la de entrenamiento (61.35 %), con una brecha de −2.92 pp, y la loss de validación (1.0253) es menor que la de entrenamiento (1.0887). Esto ocurre porque en entrenamiento actúan el data augmentation (RandomCrop, RandomHorizontalFlip) y el Dropout (0.5), mientras que la validación usa imágenes limpias con el modelo en modo `eval()`.
 
-**Mejoras posibles:** más épocas con `ReduceLROnPlateau`/`CosineAnnealingLR`, más aumento de datos (`ColorJitter`, `RandomRotation`), o una arquitectura más profunda (tipo ResNet).
+**Underfitting: sí, leve.** Con solo 3 épocas las curvas no convergen: la accuracy de validación subió de 50.69 % a 55.25 % y luego a 64.27 %, y la loss siguió bajando. El modelo aún estaba aprendiendo al terminar.
+
+**Por clase:** los vehículos son los mejor clasificados (automóvil F1 = 0.83, barco 0.82, camión 0.79). La clase más difícil es **gato** (F1 = 0.27, recall 18 %), seguida de pájaro (0.46). Perro, ciervo y caballo tienen recall alto (0.70–0.83) pero precisión baja (≈0.48), es decir, el modelo les asigna muchas imágenes de otros animales. La confusión se concentra entre animales de apariencia similar a 32×32 píxeles.
+
+**Mejoras:** entrenar 20–30 épocas, usar `ReduceLROnPlateau` o `CosineAnnealingLR`, ampliar el data augmentation (`ColorJitter`, `RandomRotation`) y probar arquitecturas más profundas (tipo ResNet).
+
+## Conclusiones
+
+1. La CNN de 3 bloques convolucionales (815 018 parámetros) procesó correctamente los tensores 4D y alcanzó 64.33 % en test con solo 3 épocas.
+2. La semilla 4 y la partición estratificada garantizaron reproducibilidad y clases balanceadas (4 000 / 1 000).
+3. El data augmentation y el Dropout evitaron el sobreajuste; el modelo presenta underfitting leve por el número limitado de épocas.
+4. El modelo distingue mejor vehículos que animales; gato es la clase más difícil.
